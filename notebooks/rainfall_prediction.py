@@ -29,16 +29,8 @@
     "model.fit(x_train, y_train)\n",
     "\n",
     "# INFER OOF\n",
-    "outputs = model.predict_proba(x_test)[:,1]"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "id": "b3444214-04c0-4ceb-9129-b4a26c70773b",
-   "metadata": {},
-   "outputs": [],
-   "source": [
+    "outputs = model.predict_proba(x_test)[:,1]\n",
+    "\n",
     "df_submission = pd.read_csv('sample_submission.csv')\n",
     "df_submission['rainfall'] = outputs\n",
     "df_submission.to_csv('submission.csv', index=False)"

@@ -1,167 +1,120 @@
-{
- "cells": [
-  {
-   "cell_type": "code",
-   "execution_count": 5,
-   "id": "2f899717-16b1-48d7-89ba-43b1606c047a",
-   "metadata": {},
-   "outputs": [
-    {
-     "ename": "AttributeError",
-     "evalue": "module 'data_preprocessing' has no attribute 'load_train_data'",
-     "output_type": "error",
-     "traceback": [
-      "\u001b[0;31m---------------------------------------------------------------------------\u001b[0m",
-      "\u001b[0;31mAttributeError\u001b[0m                            Traceback (most recent call last)",
-      "Cell \u001b[0;32mIn[5], line 6\u001b[0m\n\u001b[1;32m      3\u001b[0m \u001b[38;5;28;01mimport\u001b[39;00m \u001b[38;5;21;01mnumpy\u001b[39;00m \u001b[38;5;28;01mas\u001b[39;00m \u001b[38;5;21;01mnp\u001b[39;00m\n\u001b[1;32m      4\u001b[0m \u001b[38;5;28;01mimport\u001b[39;00m \u001b[38;5;21;01mdata_preprocessing\u001b[39;00m \u001b[38;5;28;01mas\u001b[39;00m \u001b[38;5;21;01mdp\u001b[39;00m\n\u001b[0;32m----> 6\u001b[0m train \u001b[38;5;241m=\u001b[39m dp\u001b[38;5;241m.\u001b[39mload_train_data(\u001b[38;5;124m'\u001b[39m\u001b[38;5;124m../data/train.csv\u001b[39m\u001b[38;5;124m'\u001b[39m)\n\u001b[1;32m      7\u001b[0m test \u001b[38;5;241m=\u001b[39m dp\u001b[38;5;241m.\u001b[39mload_test_data(\u001b[38;5;124m'\u001b[39m\u001b[38;5;124m../data/test.csv\u001b[39m\u001b[38;5;124m'\u001b[39m)\n\u001b[1;32m      9\u001b[0m \u001b[38;5;66;03m# Adding some basic new features\u001b[39;00m\n",
-      "\u001b[0;31mAttributeError\u001b[0m: module 'data_preprocessing' has no attribute 'load_train_data'"
-     ]
-    }
-   ],
-   "source": [
-    "from sklearn.model_selection import KFold\n",
-    "from xgboost import XGBRegressor\n",
-    "import numpy as np\n",
-    "import data_preprocessing as dp\n",
-    "\n",
-    "train = dp.load_train_data('../data/train.csv')\n",
-    "test = dp.load_test_data('../data/test.csv')\n",
-    "\n",
-    "# Adding some basic new features\n",
-    "\n",
-    "RMV = ['rainfall','id']\n",
-    "train['year_group'] = train['id']//365\n",
-    "train['temperature_range'] = train['maxtemp'] - train['mintemp']\n",
-    "train['seasonal_sin'] = np.sin(2 * np.pi * train['day'] / 365)    # Tracks seasonal behavior\n",
-    "test['year_group'] = test['id']//365\n",
-    "test['temperature_range'] = test['maxtemp'] - test['mintemp']\n",
-    "test['seasonal_sin'] = np.sin(2 * np.pi * test['day'] / 365)\n",
-    "FEATURES = [c for c in train.columns if not c in RMV]\n",
-    "\n",
-    "if __name__ == \"__main__\":\n",
-    "    print(\"Our features are:\")\n",
-    "    print( FEATURES )\n",
-    "\n",
-    "# Smack together all features for future testing\n",
-    "\n",
-    "INTERACT = []\n",
-    "for i,c1 in enumerate(FEATURES):\n",
-    "    for j,c2 in enumerate(FEATURES[i+1:]):\n",
-    "        n = f\"{c1}_{c2}\"\n",
-    "        train[n] = train[c1] * train[c2]\n",
-    "        test[n] = test[c1] * test[c2]\n",
-    "        INTERACT.append(n)\n",
-    "\n",
-    "if __name__ == \"__main__\":\n",
-    "    print(f\"There are {len(INTERACT)} interaction features:\")\n",
-    "    print( INTERACT )\n",
-    "\n",
-    "from sklearn.model_selection import KFold, GroupKFold\n",
-    "from sklearn.metrics import roc_auc_score\n",
-    "from sklearn.svm import SVC, LinearSVC  # Use sklearn's SVC or LinearSVC\n",
-    "\n",
-    "# Testing above features for best performance (change model as needed).\n",
-    "\n",
-    "if __name__ == \"__main__\":\n",
-    "    ADD  = []\n",
-    "    best_auc = 0\n",
-    "    best_oof = None\n",
-    "    best_pred = None\n",
-    "    \n",
-    "    # FORWARD FEATURE SELECTION\n",
-    "    for k,col in enumerate(['baseline']+INTERACT):\n",
-    "    \n",
-    "        FOLDS = train.year_group.nunique()\n",
-    "        kf = GroupKFold(n_splits=FOLDS)\n",
-    "    \n",
-    "        oof_svc = np.zeros(len(train))\n",
-    "        pred_svc = np.zeros(len(test))\n",
-    "    \n",
-    "        if col!='baseline': ADD.append(col)\n",
-    "    \n",
-    "        # GROUP K FOLD USING YEAR AS GROUP\n",
-    "        for i, (train_index, test_index) in enumerate(kf.split(train, groups=train.year_group)):\n",
-    "            # TRAIN AND VALID DATA\n",
-    "            x_train = train.loc[train_index, FEATURES+ADD].copy()\n",
-    "            y_train = train.loc[train_index, \"rainfall\"]\n",
-    "            x_valid = train.loc[test_index, FEATURES+ADD].copy()\n",
-    "            y_valid = train.loc[test_index, \"rainfall\"]\n",
-    "            x_test = test[FEATURES+ADD].copy()\n",
-    "    \n",
-    "            # SVC WANTS STANDARIZED FEATURES\n",
-    "            for c in FEATURES + ADD:\n",
-    "                m = x_train[c].mean()\n",
-    "                s = x_train[c].std()\n",
-    "                x_train[c] = (x_train[c] - m) / s\n",
-    "                x_valid[c] = (x_valid[c] - m) / s\n",
-    "                x_test[c] = (x_test[c] - m) / s\n",
-    "                x_test[c] = x_test[c].fillna(0)\n",
-    "    \n",
-    "            # TRAIN SVC MODEL\n",
-    "            # LinearSVC does not support `predict_proba`, so we use decision_function to get scores\n",
-    "            model = LinearSVC(C=0.1)\n",
-    "            model.fit(x_train.values, y_train.values)\n",
-    "    \n",
-    "            # INFER OOF\n",
-    "            decision_values = model.decision_function(x_valid.values)\n",
-    "            oof_svc[test_index] = 1 / (1 + np.exp(-decision_values))  # Logistic transformation\n",
-    "    \n",
-    "            # INFER TEST\n",
-    "            decision_values_test = model.decision_function(x_test.values)\n",
-    "            pred_svc += 1 / (1 + np.exp(-decision_values_test))  # Logistic transformation\n",
-    "    \n",
-    "        # COMPUTE AVERAGE TEST PREDS\n",
-    "        pred_svc /= FOLDS\n",
-    "    \n",
-    "        # COMPUTE CV VALIDATION AUC SCORE\n",
-    "        true = train.rainfall.values\n",
-    "        m = roc_auc_score(true, oof_svc)\n",
-    "    \n",
-    "        if m > best_auc:\n",
-    "            print(f\"NEW BEST with {col} at {m}\")\n",
-    "            best_auc = m\n",
-    "            best_oof = oof_svc.copy()\n",
-    "            best_pred = pred_svc.copy()\n",
-    "        else:\n",
-    "            print(f\"Worse with {col} at {m}\")\n",
-    "            ADD.remove(col)\n",
-    "\n",
-    "print(\"\")\n",
-    "# Best AUC\n",
-    "if __name__ == \"__main__\":\n",
-    "    print(f\"We achieved CV SVC AUC = {best_auc:.4f} adding {len(ADD)} interactions features:\")\n",
-    "    print( ADD )\n",
-    "\n",
-    "# Update dataframe with best features!\n",
-    "\n",
-    "ADD = ['day_maxtemp', 'day_sunshine', 'day_winddirection', 'day_year_group', 'pressure_maxtemp', 'pressure_mintemp', 'pressure_temperature_range', 'maxtemp_temparature', 'maxtemp_dewpoint', 'maxtemp_year_group', 'maxtemp_seasonal_sin', 'temparature_dewpoint', 'temparature_cloud', 'temparature_winddirection', 'temparature_windspeed', 'temparature_year_group', 'mintemp_winddirection', 'dewpoint_winddirection', 'dewpoint_year_group', 'humidity_year_group', 'cloud_windspeed', 'windspeed_year_group']\n",
-    "\n",
-    "difference = list(set(INTERACT) - set(ADD))\n",
-    "\n",
-    "train = train.drop(columns=difference)\n",
-    "test = test.drop(columns=difference)\n"
-   ]
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "Python 3 (ipykernel)",
-   "language": "python",
-   "name": "python3"
-  },
-  "language_info": {
-   "codemirror_mode": {
-    "name": "ipython",
-    "version": 3
-   },
-   "file_extension": ".py",
-   "mimetype": "text/x-python",
-   "name": "python",
-   "nbconvert_exporter": "python",
-   "pygments_lexer": "ipython3",
-   "version": "3.12.7"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 5
-}
+from sklearn.model_selection import KFold
+from xgboost import XGBRegressor
+import numpy as np
+import data_preprocessing as dp
+from sklearn.model_selection import KFold, GroupKFold
+from sklearn.metrics import roc_auc_score
+from sklearn.svm import SVC, LinearSVC
+
+train = dp.load_train_data('../data/train.csv')
+test = dp.load_test_data('../data/test.csv')
+
+# Adding some basic new features
+
+RMV = ['rainfall','id']
+train['year_group'] = train['id']//365
+train['temperature_range'] = train['maxtemp'] - train['mintemp']
+train['seasonal_sin'] = np.sin(2 * np.pi * train['day'] / 365)    # Tracks seasonal behavior
+test['year_group'] = test['id']//365
+test['temperature_range'] = test['maxtemp'] - test['mintemp']
+test['seasonal_sin'] = np.sin(2 * np.pi * test['day'] / 365)
+FEATURES = [c for c in train.columns if not c in RMV]
+
+if __name__ == "__main__":
+    print("Our features are:")
+    print( FEATURES )
+
+# Smack together all features for future testing
+
+INTERACT = []
+for i,c1 in enumerate(FEATURES):
+    for j,c2 in enumerate(FEATURES[i+1:]):
+        n = f"{c1}_{c2}"
+        train[n] = train[c1] * train[c2]
+        test[n] = test[c1] * test[c2]
+        INTERACT.append(n)
+
+if __name__ == "__main__":
+    print(f"There are {len(INTERACT)} interaction features:")
+    print( INTERACT )
+
+# Testing above features for best performance (change model as needed).
+
+if __name__ == "__main__":
+    ADD  = []
+    best_auc = 0
+    best_oof = None
+    best_pred = None
+
+        # FORWARD FEATURE SELECTION
+        for k,col in enumerate(['baseline']+INTERACT):
+
+            FOLDS = train.year_group.nunique()
+            kf = GroupKFold(n_splits=FOLDS)
+
+            oof_svc = np.zeros(len(train))
+            pred_svc = np.zeros(len(test))
+
+            if col!='baseline': ADD.append(col)
+
+            # GROUP K FOLD USING YEAR AS GROUP
+            for i, (train_index, test_index) in enumerate(kf.split(train, groups=train.year_group)):
+            # TRAIN AND VALID DATA
+                x_train = train.loc[train_index, FEATURES+ADD].copy()
+                y_train = train.loc[train_index, "rainfall"]
+                x_valid = train.loc[test_index, FEATURES+ADD].copy()
+                y_valid = train.loc[test_index, "rainfall"]
+                x_test = test[FEATURES+ADD].copy()
+
+                # SVC WANTS STANDARIZED FEATURES
+                for c in FEATURES + ADD:
+                    m = x_train[c].mean()
+                    s = x_train[c].std()
+                    x_train[c] = (x_train[c] - m) / s
+                    x_valid[c] = (x_valid[c] - m) / s
+                    x_test[c] = (x_test[c] - m) / s
+                    x_test[c] = x_test[c].fillna(0)
+
+                # TRAIN SVC MODEL
+                # LinearSVC does not support `predict_proba`, so we use decision_function to get scores
+                model = LinearSVC(C=0.1)
+                model.fit(x_train.values, y_train.values)
+
+                # INFER OOF
+                decision_values = model.decision_function(x_valid.values)
+                oof_svc[test_index] = 1 / (1 + np.exp(-decision_values))  # Logistic transformation
+
+                # INFER TEST
+                decision_values_test = model.decision_function(x_test.values)
+                pred_svc += 1 / (1 + np.exp(-decision_values_test))  # Logistic transformation
+
+            # COMPUTE AVERAGE TEST PREDS
+            pred_svc /= FOLDS
+
+            # COMPUTE CV VALIDATION AUC SCORE
+            true = train.rainfall.values
+            m = roc_auc_score(true, oof_svc)
+
+            if m > best_auc:
+                print(f"NEW BEST with {col} at {m}")
+                best_auc = m
+                best_oof = oof_svc.copy()
+                best_pred = pred_svc.copy()
+            else:
+                print(f"Worse with {col} at {m}")
+                ADD.remove(col)
+
+print("")
+# Best AUC
+if __name__ == "__main__":
+    print(f"We achieved CV SVC AUC = {best_auc:.4f} adding {len(ADD)} interactions features:")
+    print( ADD )
+
+# Update dataframe with best features!
+
+ADD = ['day_maxtemp', 'day_sunshine', 'day_winddirection', 'day_year_group', 'pressure_maxtemp', 'pressure_mintemp', 'pressure_temperature_range', 'maxtemp_temparature', 'maxtemp_dewpoint', 'maxtemp_year_group', 'maxtemp_seasonal_sin', 'temparature_dewpoint', 'temparature_cloud', 'temparature_winddirection', 'temparature_windspeed', 'temparature_year_group', 'mintemp_winddirection', 'dewpoint_winddirection', 'dewpoint_year_group', 'humidity_year_group', 'cloud_windspeed', 'windspeed_year_group']
+
+difference = list(set(INTERACT) - set(ADD))
+
+train = train.drop(columns=difference)
+test = test.drop(columns=difference)

@@ -1,241 +1,182 @@
-{
- "cells": [
-  {
-   "cell_type": "code",
-   "execution_count": 1,
-   "id": "ec5283e6-a3b5-40ab-ba02-fa0b4f7ea833",
-   "metadata": {},
-   "outputs": [
-    {
-     "ename": "ModuleNotFoundError",
-     "evalue": "No module named 'feature_engineering'",
-     "output_type": "error",
-     "traceback": [
-      "\u001b[0;31m---------------------------------------------------------------------------\u001b[0m",
-      "\u001b[0;31mModuleNotFoundError\u001b[0m                       Traceback (most recent call last)",
-      "Cell \u001b[0;32mIn[1], line 20\u001b[0m\n\u001b[1;32m     18\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtqdm\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m tqdm\n\u001b[1;32m     19\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mxgboost\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m XGBClassifier\n\u001b[0;32m---> 20\u001b[0m \u001b[38;5;28;01mimport\u001b[39;00m \u001b[38;5;21;01mfeature_engineering\u001b[39;00m \u001b[38;5;28;01mas\u001b[39;00m \u001b[38;5;21;01mfe\u001b[39;00m\n\u001b[1;32m     22\u001b[0m train \u001b[38;5;241m=\u001b[39m fe\u001b[38;5;241m.\u001b[39mtrain\n\u001b[1;32m     23\u001b[0m test \u001b[38;5;241m=\u001b[39m fe\u001b[38;5;241m.\u001b[39mtest\n",
-      "\u001b[0;31mModuleNotFoundError\u001b[0m: No module named 'feature_engineering'"
-     ]
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+import torch
+torch.set_default_dtype(torch.float64)
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, roc_auc_score
+
+from tqdm import tqdm
+from xgboost import XGBClassifier
+import feature_engineering as fe
+
+train = fe.train
+test = fe.test
+
+def train_and_evaluate_model(model, X_train, X_test, y_train, y_test):
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    accuracy = accuracy_score(y_test, y_pred)
+    roc_auc = roc_auc_score(y_test, y_pred)
+
+    print(f"Model: {model.__class__.__name__}")
+    print(f"Accuracy: {accuracy:.5f}")
+    print(f"ROC AUC Score: {roc_auc:.5f}\n")
+
+predictors = ['day', 'pressure', 'maxtemp', 'temperature', 'mintemp',
+       'dewpoint', 'humidity', 'cloud', 'sunshine', 'winddirection',
+       'windspeed', 'rainfall', 'year_group', 'temperature_range',
+       'seasonal_sin', 'day_maxtemp', 'day_sunshine', 'day_winddirection',
+       'day_year_group', 'pressure_maxtemp', 'pressure_mintemp',
+       'pressure_temperature_range', 'maxtemp_dewpoint', 'maxtemp_year_group',
+       'maxtemp_seasonal_sin', 'mintemp_winddirection',
+       'dewpoint_winddirection', 'dewpoint_year_group', 'humidity_year_group',
+       'cloud_windspeed', 'windspeed_year_group']
+target = 'rainfall'
+
+n = 4 * 365
+df_train = train.iloc[:n]
+df_test = train.iloc[n:]
+
+df_train['hp'] = df_train.groupby('day')['rainfall'].mean().to_list() * 4
+df_test['hp'] = df_train.groupby('day')['rainfall'].mean().to_list() * 2
+
+X_train = df_train[predictors]
+y_train = df_train[target]
+
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+
+X_test = df_test[predictors]
+y_test = df_test[target]
+
+X_test = scaler.transform(X_test)
+
+models = {
+    "SVM": SVC(kernel='poly', degree=1),
+    "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42),
+    "XGBoost": XGBClassifier(n_estimators=200, learning_rate=0.05, max_depth=5, min_child_weight=3, subsample=0.8, \
+                             colsample_bytree=0.7, reg_alpha=0.1, reg_lambda=1.0, eval_metric="logloss", random_state=42)
     }
-   ],
-   "source": [
-    "import pandas as pd\n",
-    "import numpy as np\n",
-    "import matplotlib.pyplot as plt\n",
-    "import seaborn as sns\n",
-    "\n",
-    "import torch\n",
-    "torch.set_default_dtype(torch.float64)\n",
-    "import torch.nn as nn\n",
-    "import torch.optim as optim\n",
-    "from torch.utils.data import DataLoader, TensorDataset\n",
-    "\n",
-    "from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV\n",
-    "from sklearn.preprocessing import StandardScaler, MinMaxScaler\n",
-    "from sklearn.svm import SVC\n",
-    "from sklearn.ensemble import RandomForestClassifier\n",
-    "from sklearn.metrics import accuracy_score, roc_auc_score\n",
-    "\n",
-    "from tqdm import tqdm\n",
-    "from xgboost import XGBClassifier\n",
-    "import feature_engineering as fe\n",
-    "\n",
-    "train = fe.train\n",
-    "test = fe.test\n",
-    "\n",
-    "def train_and_evaluate_model(model, X_train, X_test, y_train, y_test):\n",
-    "    model.fit(X_train, y_train)\n",
-    "    y_pred = model.predict(X_test)\n",
-    "\n",
-    "    accuracy = accuracy_score(y_test, y_pred)\n",
-    "    roc_auc = roc_auc_score(y_test, y_pred)\n",
-    "\n",
-    "    print(f\"Model: {model.__class__.__name__}\")\n",
-    "    print(f\"Accuracy: {accuracy:.5f}\")\n",
-    "    print(f\"ROC AUC Score: {roc_auc:.5f}\\n\")\n",
-    "\n",
-    "# jupyter nbconvert --to script feature_engineering.ipynb\n",
-    "# import feature_engineering as fe\n",
-    "\n",
-    "# Use various models to check accuracies\n",
-    "\n",
-    "# train = fe.train\n",
-    "# test = fe.test\n",
-    "\n",
-    "predictors = ['day', 'pressure', 'maxtemp', 'temperature', 'mintemp',\n",
-    "       'dewpoint', 'humidity', 'cloud', 'sunshine', 'winddirection',\n",
-    "       'windspeed', 'rainfall', 'year_group', 'temperature_range',\n",
-    "       'seasonal_sin', 'day_maxtemp', 'day_sunshine', 'day_winddirection',\n",
-    "       'day_year_group', 'pressure_maxtemp', 'pressure_mintemp',\n",
-    "       'pressure_temperature_range', 'maxtemp_dewpoint', 'maxtemp_year_group',\n",
-    "       'maxtemp_seasonal_sin', 'mintemp_winddirection',\n",
-    "       'dewpoint_winddirection', 'dewpoint_year_group', 'humidity_year_group',\n",
-    "       'cloud_windspeed', 'windspeed_year_group']\n",
-    "target = 'rainfall'\n",
-    "\n",
-    "# X_train, X_test, y_train, y_test = preprocess_data(df, predictors, target)\n",
-    "# X_train, y_train = do_smote(X_train, y_train)\n",
-    "\n",
-    "n = 4 * 365\n",
-    "df_train = train.iloc[:n]\n",
-    "df_test = train.iloc[n:]\n",
-    "\n",
-    "df_train['hp'] = df_train.groupby('day')['rainfall'].mean().to_list() * 4\n",
-    "df_test['hp'] = df_train.groupby('day')['rainfall'].mean().to_list() * 2\n",
-    "\n",
-    "X_train = df_train[predictors]\n",
-    "y_train = df_train[target]\n",
-    "\n",
-    "scaler = StandardScaler()\n",
-    "X_train = scaler.fit_transform(X_train)\n",
-    "\n",
-    "X_test = df_test[predictors]\n",
-    "y_test = df_test[target]\n",
-    "\n",
-    "X_test = scaler.transform(X_test)\n",
-    "\n",
-    "models = {\n",
-    "    \"SVM\": SVC(kernel='poly', degree=1),\n",
-    "    \"Random Forest\": RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42),\n",
-    "    \"XGBoost\": XGBClassifier(n_estimators=200, learning_rate=0.05, max_depth=5, min_child_weight=3, subsample=0.8, \\\n",
-    "                             colsample_bytree=0.7, reg_alpha=0.1, reg_lambda=1.0, eval_metric=\"logloss\", random_state=42)\n",
-    "    }\n",
-    "\n",
-    "param_grid = {'n_estimators': [100, 200], 'max_depth': [10, 20]}\n",
-    "grid_search = GridSearchCV(RandomForestClassifier(), param_grid, cv=5, scoring='roc_auc')\n",
-    "grid_search.fit(X_train, y_train)\n",
-    "print(\"Best parameters:\", grid_search.best_params_)\n",
-    "\n",
-    "\n",
-    "for model in models.values():\n",
-    "    train_and_evaluate_model(model, X_train, X_test, y_train, y_test)\n",
-    "\n",
-    "\n",
-    "X = train[predictors].values\n",
-    "y = train[target].values\n",
-    "\n",
-    "# Scale the features\n",
-    "scaler = MinMaxScaler()\n",
-    "X_scaled = scaler.fit_transform(X)\n",
-    "\n",
-    "# Reshape for LSTM [samples, time steps, features]\n",
-    "X_reshaped = X_scaled.reshape((X_scaled.shape[0], 1, X_scaled.shape[1]))\n",
-    "\n",
-    "# Split into train and test sets\n",
-    "N = 4 * 365\n",
-    "X_train, X_test, y_train, y_test = X_reshaped[:N], X_reshaped[N:], y[:N], y[N:]\n",
-    "# X_train, X_test, y_train, y_test = train_test_split(X_reshaped, y, test_size=0.2, random_state=42)\n",
-    "\n",
-    "# Convert to PyTorch tensors\n",
-    "X_train_tensor = torch.tensor(X_train, dtype=torch.float64)\n",
-    "y_train_tensor = torch.tensor(y_train, dtype=torch.float64).view(-1, 1) # Reshape y to [samples, 1]\n",
-    "X_test_tensor = torch.tensor(X_test, dtype=torch.float64)\n",
-    "y_test_tensor = torch.tensor(y_test, dtype=torch.float64).view(-1, 1)\n",
-    "\n",
-    "# Create DataLoader for efficient batching\n",
-    "train_dataset = TensorDataset(X_train_tensor, y_train_tensor)\n",
-    "test_dataset = TensorDataset(X_test_tensor, y_test_tensor)\n",
-    "\n",
-    "train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)\n",
-    "test_loader = DataLoader(test_dataset, batch_size=32)\n",
-    "\n",
-    "# Define the LSTM model\n",
-    "class LSTMModel(nn.Module):\n",
-    "    def __init__(self, input_size, hidden_size, output_size):\n",
-    "        super(LSTMModel, self).__init__()\n",
-    "        self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)\n",
-    "        self.dropout = nn.Dropout(0.2)\n",
-    "        self.fc = nn.Linear(hidden_size, output_size)\n",
-    "        self.sigmoid = nn.Sigmoid()\n",
-    "\n",
-    "    def forward(self, x):\n",
-    "        out, _ = self.lstm(x)\n",
-    "        out = self.dropout(out[:, -1, :])  # Take the last time step's output\n",
-    "        out = self.fc(out)\n",
-    "        out = self.sigmoid(out)\n",
-    "        return out\n",
-    "\n",
-    "# Instantiate the model\n",
-    "input_size = X_train_tensor.shape[2]  # Number of features\n",
-    "hidden_size = 50\n",
-    "output_size = 1\n",
-    "\n",
-    "model = LSTMModel(input_size, hidden_size, output_size)\n",
-    "\n",
-    "# Loss and optimizer\n",
-    "criterion = nn.BCELoss()  # Binary Cross-Entropy Loss\n",
-    "optimizer = optim.Adam(model.parameters(), lr=0.001)\n",
-    "\n",
-    "# Training loop\n",
-    "epochs = 50\n",
-    "for epoch in range(epochs):\n",
-    "    model.train()\n",
-    "    for inputs, labels in train_loader:\n",
-    "        optimizer.zero_grad()\n",
-    "        outputs = model(inputs)\n",
-    "        loss = criterion(outputs, labels)\n",
-    "        loss.backward()\n",
-    "        optimizer.step()\n",
-    "\n",
-    "    # Evaluation\n",
-    "    model.eval()\n",
-    "    with torch.no_grad():\n",
-    "        correct = 0\n",
-    "        total = 0\n",
-    "        all_labels = []\n",
-    "        all_predictions = []\n",
-    "        for inputs, labels in test_loader:\n",
-    "            outputs = model(inputs)\n",
-    "            predicted = (outputs > 0.5).float()\n",
-    "            total += labels.size(0)\n",
-    "            correct += (predicted == labels).sum().item()\n",
-    "            all_labels.extend(labels.cpu().numpy())\n",
-    "            all_predictions.extend(outputs.cpu().numpy())\n",
-    "\n",
-    "        accuracy = correct / total\n",
-    "        roc_auc = roc_auc_score(all_labels, all_predictions) # Calculate ROC AUC score\n",
-    "        print(f'Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}, Accuracy: {accuracy:.4f}, ROC AUC: {roc_auc:.4f}')\n",
-    "\n",
-    "# Final evaluation\n",
-    "model.eval()\n",
-    "with torch.no_grad():\n",
-    "    correct = 0\n",
-    "    total = 0\n",
-    "    all_labels = []\n",
-    "    all_predictions = []\n",
-    "    for inputs, labels in test_loader:\n",
-    "        outputs = model(inputs)\n",
-    "        predicted = (outputs > 0.5).float()\n",
-    "        total += labels.size(0)\n",
-    "        correct += (predicted == labels).sum().item()\n",
-    "        all_labels.extend(labels.cpu().numpy())\n",
-    "        all_predictions.extend(outputs.cpu().numpy())\n",
-    "\n",
-    "accuracy = correct / total\n",
-    "roc_auc = roc_auc_score(all_labels, all_predictions)  # Calculate ROC AUC score\n",
-    "print(f'Final Test Accuracy: {accuracy:.4f}, Final ROC AUC: {roc_auc:.4f}')"
-   ]
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "Python 3 (ipykernel)",
-   "language": "python",
-   "name": "python3"
-  },
-  "language_info": {
-   "codemirror_mode": {
-    "name": "ipython",
-    "version": 3
-   },
-   "file_extension": ".py",
-   "mimetype": "text/x-python",
-   "name": "python",
-   "nbconvert_exporter": "python",
-   "pygments_lexer": "ipython3",
-   "version": "3.12.7"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 5
-}
+
+param_grid = {'n_estimators': [100, 200], 'max_depth': [10, 20]}
+grid_search = GridSearchCV(RandomForestClassifier(), param_grid, cv=5, scoring='roc_auc')
+grid_search.fit(X_train, y_train)
+print("Best parameters:", grid_search.best_params_)
+
+for model in models.values():
+    train_and_evaluate_model(model, X_train, X_test, y_train, y_test)
+
+X = train[predictors].values
+y = train[target].values
+
+# Scale the features
+scaler = MinMaxScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Reshape for LSTM [samples, time steps, features]
+X_reshaped = X_scaled.reshape((X_scaled.shape[0], 1, X_scaled.shape[1]))
+
+# Split into train and test sets
+N = 4 * 365
+X_train, X_test, y_train, y_test = X_reshaped[:N], X_reshaped[N:], y[:N], y[N:]
+# X_train, X_test, y_train, y_test = train_test_split(X_reshaped, y, test_size=0.2, random_state=42)
+
+# Convert to PyTorch tensors
+X_train_tensor = torch.tensor(X_train, dtype=torch.float64)
+y_train_tensor = torch.tensor(y_train, dtype=torch.float64).view(-1, 1) # Reshape y to [samples, 1]
+X_test_tensor = torch.tensor(X_test, dtype=torch.float64)
+y_test_tensor = torch.tensor(y_test, dtype=torch.float64).view(-1, 1)
+
+# Create DataLoader for efficient batching
+train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=32)
+
+# Define the LSTM model
+class LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(LSTMModel, self).__init__()
+        self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
+        self.dropout = nn.Dropout(0.2)
+        self.fc = nn.Linear(hidden_size, output_size)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        out, _ = self.lstm(x)
+        out = self.dropout(out[:, -1, :])  # Take the last time step's output
+        out = self.fc(out)
+        out = self.sigmoid(out)
+        return out
+
+# Instantiate the model
+input_size = X_train_tensor.shape[2]  # Number of features
+hidden_size = 50
+output_size = 1
+
+model = LSTMModel(input_size, hidden_size, output_size)
+
+# Loss and optimizer
+criterion = nn.BCELoss()  # Binary Cross-Entropy Loss
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# Training loop
+epochs = 50
+for epoch in range(epochs):
+    model.train()
+    for inputs, labels in train_loader:
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+    # Evaluation
+    model.eval()
+    with torch.no_grad():
+        correct = 0
+        total = 0
+        all_labels = []
+        all_predictions = []
+        for inputs, labels in test_loader:
+            outputs = model(inputs)
+            predicted = (outputs > 0.5).float()
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+            all_labels.extend(labels.cpu().numpy())
+            all_predictions.extend(outputs.cpu().numpy())
+
+        accuracy = correct / total
+        roc_auc = roc_auc_score(all_labels, all_predictions) # Calculate ROC AUC score
+        print(f'Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}, Accuracy: {accuracy:.4f}, ROC AUC: {roc_auc:.4f}')
+
+# Final evaluation
+model.eval()
+with torch.no_grad():
+    correct = 0
+    total = 0
+    all_labels = []
+    all_predictions = []
+    for inputs, labels in test_loader:
+        outputs = model(inputs)
+        predicted = (outputs > 0.5).float()
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+        all_labels.extend(labels.cpu().numpy())
+        all_predictions.extend(outputs.cpu().numpy())
+
+accuracy = correct / total
+roc_auc = roc_auc_score(all_labels, all_predictions)  # Calculate ROC AUC score
+print(f'Final Test Accuracy: {accuracy:.4f}, Final ROC AUC: {roc_auc:.4f}')
